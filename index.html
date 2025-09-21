@@ -11,7 +11,7 @@
       height: 100vh;
     }
     #sidebar {
-      width: 250px;
+      width: 300px;
       background: #f0f0f0;
       border-right: 1px solid #ccc;
       padding: 10px;
@@ -38,12 +38,7 @@
     #console { grid-area: console; background: #111; color: #0f0; white-space: pre; }
     .file {
       cursor: pointer;
-      margin-left: 20px;
-    }
-    .folder {
-      font-weight: bold;
-      cursor: pointer;
-      margin-top: 5px;
+      margin-left: 10px;
     }
   </style>
 </head>
@@ -57,7 +52,7 @@
 
   <script>
     // 🔧 Ändra dessa till ditt eget repo
-    const username = "oakster";
+    const username = "oaksterini";
     const repo = "ake";
     const branch = "main"; // eller "master"
 
@@ -70,66 +65,26 @@
       const url = `https://api.github.com/repos/${username}/${repo}/git/trees/${branch}?recursive=1`;
       const res = await fetch(url);
       const data = await res.json();
-      return data.tree.filter(item => item.type === "blob" || item.type === "tree");
+      return data.tree.filter(item => item.type === "blob"); // Endast filer
     }
 
-    function renderTree(tree) {
-      sidebar.innerHTML = "";
-      const folders = {};
-
-      tree.forEach(item => {
-        const parts = item.path.split("/");
-        let current = folders;
-
-        parts.forEach((part, i) => {
-          if (!current[part]) {
-            current[part] = (i === parts.length - 1 && item.type === "blob") ? null : {};
-          }
-          current = current[part];
-        });
+    function renderTree(files) {
+      sidebar.innerHTML = "<h3>Projektfiler</h3>";
+      files.forEach(file => {
+        let fileDiv = document.createElement("div");
+        fileDiv.textContent = file.path; // hela sökvägen
+        fileDiv.className = "file";
+        fileDiv.onclick = () => loadFile(file.path);
+        sidebar.appendChild(fileDiv);
       });
-
-      function createList(obj, parent) {
-        for (let key in obj) {
-          if (obj[key] === null) {
-            let file = document.createElement("div");
-            file.textContent = key;
-            file.className = "file";
-            file.onclick = () => loadFile(key, parent.dataset.path + "/" + key);
-            parent.appendChild(file);
-          } else {
-            let folder = document.createElement("div");
-            folder.textContent = key;
-            folder.className = "folder";
-            folder.dataset.path = (parent.dataset?.path || "") + "/" + key;
-            parent.appendChild(folder);
-
-            let sub = document.createElement("div");
-            sub.style.marginLeft = "10px";
-            sub.dataset.path = folder.dataset.path;
-            parent.appendChild(sub);
-
-            folder.onclick = () => {
-              sub.style.display = sub.style.display === "none" ? "block" : "none";
-            };
-
-            createList(obj[key], sub);
-          }
-        }
-      }
-
-      let root = document.createElement("div");
-      root.dataset.path = "";
-      sidebar.appendChild(root);
-      createList(folders, root);
     }
 
-    async function loadFile(name, path) {
-      const rawUrl = `https://raw.githubusercontent.com/${username}/${repo}/${branch}${path}`;
+    async function loadFile(path) {
+      const rawUrl = `https://raw.githubusercontent.com/${username}/${repo}/${branch}/${path}`;
       const res = await fetch(rawUrl);
       const text = await res.text();
       codePane.textContent = text;
-      consolePane.textContent = `[Ingen riktig exekvering]\nFil: ${name}\nStorlek: ${text.length} tecken`;
+      consolePane.textContent = `[Ingen riktig exekvering]\nFil: ${path}\nStorlek: ${text.length} tecken`;
     }
 
     // Initiera
@@ -137,4 +92,3 @@
   </script>
 </body>
 </html>
-
