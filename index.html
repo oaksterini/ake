@@ -36,9 +36,21 @@
     #code { grid-area: code; white-space: pre; background: #fafafa; }
     #program { grid-area: program; }
     #console { grid-area: console; background: #111; color: #0f0; white-space: pre; }
+    .folder {
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 4px;
+    }
     .file {
       cursor: pointer;
-      margin-left: 10px;
+      margin-left: 20px;
+    }
+    .nested {
+      margin-left: 15px;
+      display: none;
+    }
+    .active {
+      display: block;
     }
   </style>
 </head>
@@ -60,23 +72,56 @@
     const codePane = document.getElementById("code");
     const consolePane = document.getElementById("console");
 
+    // Filer att ignorera
+    const ignoreList = ["CNAME", "index.html"];
+
     // Hämta repo-trädet från GitHub API
     async function fetchRepoTree() {
       const url = `https://api.github.com/repos/${username}/${repo}/git/trees/${branch}?recursive=1`;
       const res = await fetch(url);
       const data = await res.json();
-      return data.tree.filter(item => item.type === "blob"); // Endast filer
+      return data.tree.filter(item => item.type === "blob" && !ignoreList.includes(item.path));
     }
 
-    function renderTree(files) {
-      sidebar.innerHTML = "<h3>Projektfiler</h3>";
-      files.forEach(file => {
-        let fileDiv = document.createElement("div");
-        fileDiv.textContent = file.path; // hela sökvägen
-        fileDiv.className = "file";
-        fileDiv.onclick = () => loadFile(file.path);
-        sidebar.appendChild(fileDiv);
+    // Bygg ett mappträd av filerna
+    function buildTree(paths) {
+      const root = {};
+      paths.forEach(path => {
+        const parts = path.split("/");
+        let current = root;
+        parts.forEach((part, i) => {
+          if (!current[part]) {
+            current[part] = (i === parts.length - 1) ? null : {};
+          }
+          current = current[part];
+        });
       });
+      return root;
+    }
+
+    // Rendera trädet till sidomenyn
+    function renderTree(tree, parent, path = "") {
+      for (let key in tree) {
+        if (tree[key] === null) {
+          let file = document.createElement("div");
+          file.textContent = key;
+          file.className = "file";
+          file.onclick = () => loadFile(path + "/" + key);
+          parent.appendChild(file);
+        } else {
+          let folder = document.createElement("div");
+          folder.textContent = key;
+          folder.className = "folder";
+          folder.onclick = () => nested.classList.toggle("active");
+          parent.appendChild(folder);
+
+          let nested = document.createElement("div");
+          nested.className = "nested";
+          parent.appendChild(nested);
+
+          renderTree(tree[key], nested, path + "/" + key);
+        }
+      }
     }
 
     async function loadFile(path) {
@@ -88,7 +133,12 @@
     }
 
     // Initiera
-    fetchRepoTree().then(renderTree);
+    fetchRepoTree().then(files => {
+      const paths = files.map(f => f.path);
+      const tree = buildTree(paths);
+      sidebar.innerHTML = "<h3>Projektfiler</h3>";
+      renderTree(tree, sidebar, "");
+    });
   </script>
 </body>
 </html>
