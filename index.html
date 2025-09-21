@@ -1,208 +1,99 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
   <title>Mina projekt</title>
-
-  <!-- highlight.js för att visa kod med färg -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
   <style>
-    /* Enkel layout: vänster projektlista, höger kod/runner */
     body {
       margin: 0;
-      font-family: sans-serif;
+      font-family: monospace;
       display: flex;
       height: 100vh;
     }
     #sidebar {
       width: 200px;
+      background: #f0f0f0;
       border-right: 1px solid #ccc;
       padding: 10px;
       overflow-y: auto;
     }
     #main {
       flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    #fileList div {
-      padding: 4px;
-      cursor: pointer;
-    }
-    #fileList div.active {
-      background: #e0e0e0;
-    }
-    pre {
-      margin: 0;
-      padding: 10px;
-      overflow: auto;
-      border-top: 1px solid #ccc;
-      border-bottom: 1px solid #ccc;
-      flex: 1;
-    }
-    #runner {
-      flex: 1;
-      border: none;
-    }
-    #topbar {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "code program"
+        "console program";
+      gap: 5px;
       padding: 5px;
-      border-bottom: 1px solid #ccc;
-      display: flex;
-      gap: 10px;
-      align-items: center;
+    }
+    .pane {
+      border: 1px solid #aaa;
+      padding: 5px;
+      overflow: auto;
+    }
+    #code { grid-area: code; white-space: pre; background: #fafafa; }
+    #program { grid-area: program; }
+    #console { grid-area: console; background: #111; color: #0f0; white-space: pre; }
+    .file {
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .folder {
+      font-weight: bold;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <!-- Sidopanel för att välja projekt och filer -->
-  <div id="sidebar">
-    <h3>Projekt</h3>
-    <!-- Här listas alla projektmappar (läggs in i JavaScript nedan) -->
-    <div id="projectList"></div>
-    <hr>
-    <h3>Filer</h3>
-    <!-- Här listas filer i det valda projektet -->
-    <div id="fileList"></div>
-  </div>
-
-  <!-- Huvudpanel för kodvisning och körning -->
+  <div id="sidebar"></div>
   <div id="main">
-    <div id="topbar">
-      <button id="runBtn">Kör</button>
-      <span id="status"></span>
-    </div>
-    <!-- Kodvisaren -->
-    <pre><code id="codeViewer" class="hljs"></code></pre>
-    <!-- Runner-iframe -->
-    <iframe id="runner"></iframe>
+    <div id="code" class="pane">← Välj en fil till vänster</div>
+    <div id="program" class="pane">[Programruta]</div>
+    <div id="console" class="pane">[Konsolruta]</div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
   <script>
-    /*
-      Idén:
-      - Du skapar mappar med projekt direkt i din GitHub-repo, bredvid index.html
-      - Varje mapp innehåller dina filer (HTML, JS, CSS, kanske .py)
-      - Här listar vi dem manuellt i projects-arrayen nedan.
-    */
-
-    // === Här lägger du in dina projekt ===
-    // Format: { name:"projektnamn", files:{ filnamn:"kod som text" } }
-    // Eftersom GitHub Pages inte låter oss lista filer automatiskt måste du själv fylla på detta.
-    // Exempel:
-    const projects = [
-      {
-        name: "demo",
-        files: {
-          "index.html": "<!doctype html><html><body><h1>Hej demo</h1><script src='script.js'></script></body></html>",
-          "script.js": "console.log('Hej från demo!');"
-        }
+    // Exempeldata: mappstruktur
+    const projects = {
+      "Python": {
+        "hello.py": "print('Hej från Python!')\nfor i in range(5):\n    print(i)"
       },
-      {
-        name: "mitt-python",
-        files: {
-          "hello.py": "print('Hej från Python!')"
-        }
-      }
-    ];
-
-    // Tillstånd
-    let activeProject = null;
-    let activeFile = null;
-    let pyodide = null; // laddas om vi kör python
-
-    // === Rendering av projektlistan ===
-    const projectListEl = document.getElementById("projectList");
-    const fileListEl = document.getElementById("fileList");
-    const codeViewerEl = document.getElementById("codeViewer");
-    const statusEl = document.getElementById("status");
-
-    function renderProjects() {
-      projectListEl.innerHTML = "";
-      projects.forEach((proj, idx) => {
-        const d = document.createElement("div");
-        d.textContent = proj.name;
-        d.onclick = () => {
-          activeProject = idx;
-          activeFile = null;
-          renderFiles();
-          renderCode();
-        };
-        projectListEl.appendChild(d);
-      });
-    }
-
-    function renderFiles() {
-      fileListEl.innerHTML = "";
-      if (activeProject === null) return;
-      const files = projects[activeProject].files;
-      Object.keys(files).forEach(name => {
-        const d = document.createElement("div");
-        d.textContent = name;
-        d.className = (activeFile === name ? "active" : "");
-        d.onclick = () => {
-          activeFile = name;
-          renderCode();
-        };
-        fileListEl.appendChild(d);
-      });
-    }
-
-    function renderCode() {
-      if (activeProject === null || !activeFile) {
-        codeViewerEl.textContent = "// Välj ett projekt och en fil";
-        hljs.highlightElement(codeViewerEl);
-        return;
-      }
-      const content = projects[activeProject].files[activeFile];
-      codeViewerEl.textContent = content;
-      hljs.highlightElement(codeViewerEl);
-    }
-
-    // Kör knappen
-    document.getElementById("runBtn").onclick = async () => {
-      if (activeProject === null || !activeFile) {
-        alert("Välj en fil att köra");
-        return;
-      }
-      const name = activeFile;
-      const content = projects[activeProject].files[name];
-      const iframe = document.getElementById("runner");
-
-      if (name.endsWith(".html")) {
-        // HTML körs direkt i iframe
-        iframe.srcdoc = content;
-        statusEl.textContent = "Körde HTML.";
-      } else if (name.endsWith(".js")) {
-        // JS körs inuti HTML-wrapper
-        const wrapper = `<!doctype html><html><body><script>\ntry {\n${content}\n} catch(e){ document.body.innerText='Fel: '+e; }<\/script></body></html>`;
-        iframe.srcdoc = wrapper;
-        statusEl.textContent = "Körde JS.";
-      } else if (name.endsWith(".py")) {
-        statusEl.textContent = "Laddar Pyodide (för Python)...";
-        if (!pyodide) {
-          const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js";
-          document.head.appendChild(script);
-          await new Promise(res => script.onload = res);
-          pyodide = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/" });
-        }
-        try {
-          const result = await pyodide.runPythonAsync(content);
-          iframe.srcdoc = `<pre>${result ?? "Klar"}</pre>`;
-          statusEl.textContent = "Körde Python.";
-        } catch(e) {
-          iframe.srcdoc = `<pre>Fel: ${e}</pre>`;
-          statusEl.textContent = "Fel vid Pythonkörning.";
-        }
-      } else {
-        iframe.srcdoc = "<p>Denna filtyp kan inte köras.</p>";
+      "C#": {
+        "Program.cs": "using System;\nclass Program {\n  static void Main(){\n    Console.WriteLine(\"Hej från C#\");\n  }\n}"
+      },
+      "C++": {
+        "main.cpp": "#include <iostream>\nusing namespace std;\nint main(){\n cout << \"Hej från C++\" << endl;\n return 0;\n}"
       }
     };
 
-    // Starta med att rendera projekten
-    renderProjects();
+    const sidebar = document.getElementById("sidebar");
+    const codePane = document.getElementById("code");
+    const consolePane = document.getElementById("console");
+
+    function renderTree(obj, parent) {
+      for (let key in obj) {
+        if (typeof obj[key] === "string") {
+          let file = document.createElement("div");
+          file.textContent = key;
+          file.className = "file";
+          file.onclick = () => {
+            codePane.textContent = obj[key];
+            consolePane.textContent = "[Simulerad output för " + key + "]";
+          };
+          parent.appendChild(file);
+        } else {
+          let folder = document.createElement("div");
+          folder.textContent = key;
+          folder.className = "folder";
+          parent.appendChild(folder);
+          renderTree(obj[key], parent);
+        }
+      }
+    }
+
+    renderTree(projects, sidebar);
   </script>
 </body>
 </html>
