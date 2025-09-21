@@ -11,7 +11,7 @@
       height: 100vh;
     }
     #sidebar {
-      width: 200px;
+      width: 250px;
       background: #f0f0f0;
       border-right: 1px solid #ccc;
       padding: 10px;
@@ -38,16 +38,17 @@
     #console { grid-area: console; background: #111; color: #0f0; white-space: pre; }
     .file {
       cursor: pointer;
-      margin-left: 10px;
+      margin-left: 20px;
     }
     .folder {
       font-weight: bold;
       cursor: pointer;
+      margin-top: 5px;
     }
   </style>
 </head>
 <body>
-  <div id="sidebar"></div>
+  <div id="sidebar">Laddar projekt...</div>
   <div id="main">
     <div id="code" class="pane">← Välj en fil till vänster</div>
     <div id="program" class="pane">[Programruta]</div>
@@ -55,45 +56,84 @@
   </div>
 
   <script>
-    // Exempeldata: mappstruktur
-    const projects = {
-      "Python": {
-        "hello.py": "print('Hej från Python!')\nfor i in range(5):\n    print(i)"
-      },
-      "C#": {
-        "Program.cs": "using System;\nclass Program {\n  static void Main(){\n    Console.WriteLine(\"Hej från C#\");\n  }\n}"
-      },
-      "C++": {
-        "main.cpp": "#include <iostream>\nusing namespace std;\nint main(){\n cout << \"Hej från C++\" << endl;\n return 0;\n}"
-      }
-    };
+    // 🔧 Ändra dessa till ditt eget repo
+    const username = "DITT_GITHUB_USERNAME";
+    const repo = "DITT_REPO_NAMN";
+    const branch = "main"; // eller "master"
 
     const sidebar = document.getElementById("sidebar");
     const codePane = document.getElementById("code");
     const consolePane = document.getElementById("console");
 
-    function renderTree(obj, parent) {
-      for (let key in obj) {
-        if (typeof obj[key] === "string") {
-          let file = document.createElement("div");
-          file.textContent = key;
-          file.className = "file";
-          file.onclick = () => {
-            codePane.textContent = obj[key];
-            consolePane.textContent = "[Simulerad output för " + key + "]";
-          };
-          parent.appendChild(file);
-        } else {
-          let folder = document.createElement("div");
-          folder.textContent = key;
-          folder.className = "folder";
-          parent.appendChild(folder);
-          renderTree(obj[key], parent);
-        }
-      }
+    // Hämta repo-trädet från GitHub API
+    async function fetchRepoTree() {
+      const url = `https://api.github.com/repos/${username}/${repo}/git/trees/${branch}?recursive=1`;
+      const res = await fetch(url);
+      const data = await res.json();
+      return data.tree.filter(item => item.type === "blob" || item.type === "tree");
     }
 
-    renderTree(projects, sidebar);
+    function renderTree(tree) {
+      sidebar.innerHTML = "";
+      const folders = {};
+
+      tree.forEach(item => {
+        const parts = item.path.split("/");
+        let current = folders;
+
+        parts.forEach((part, i) => {
+          if (!current[part]) {
+            current[part] = (i === parts.length - 1 && item.type === "blob") ? null : {};
+          }
+          current = current[part];
+        });
+      });
+
+      function createList(obj, parent) {
+        for (let key in obj) {
+          if (obj[key] === null) {
+            let file = document.createElement("div");
+            file.textContent = key;
+            file.className = "file";
+            file.onclick = () => loadFile(key, parent.dataset.path + "/" + key);
+            parent.appendChild(file);
+          } else {
+            let folder = document.createElement("div");
+            folder.textContent = key;
+            folder.className = "folder";
+            folder.dataset.path = (parent.dataset?.path || "") + "/" + key;
+            parent.appendChild(folder);
+
+            let sub = document.createElement("div");
+            sub.style.marginLeft = "10px";
+            sub.dataset.path = folder.dataset.path;
+            parent.appendChild(sub);
+
+            folder.onclick = () => {
+              sub.style.display = sub.style.display === "none" ? "block" : "none";
+            };
+
+            createList(obj[key], sub);
+          }
+        }
+      }
+
+      let root = document.createElement("div");
+      root.dataset.path = "";
+      sidebar.appendChild(root);
+      createList(folders, root);
+    }
+
+    async function loadFile(name, path) {
+      const rawUrl = `https://raw.githubusercontent.com/${username}/${repo}/${branch}${path}`;
+      const res = await fetch(rawUrl);
+      const text = await res.text();
+      codePane.textContent = text;
+      consolePane.textContent = `[Ingen riktig exekvering]\nFil: ${name}\nStorlek: ${text.length} tecken`;
+    }
+
+    // Initiera
+    fetchRepoTree().then(renderTree);
   </script>
 </body>
 </html>
