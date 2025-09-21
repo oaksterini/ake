@@ -1,25 +1,305 @@
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Åkes första sida</title>
-        <style>
-            img {
-                width: 100px;
-                border-radius: 50px;
-                float: left;
-                margin-right: 10px;
-            }
-            p.username {
-                font-weight: bold;
-            }
-        </style>
-    </head>
-    <body>
-        <img src="profilbild.jpeg">
-        <p class="username">DÖDSHÖNAN</p>
-        <p>Akta er för honnom!</p>
-    </body>
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Min projekt-sida — kör och visa kod</title>
+  <!-- CDN: highlight.js + pyodide for Python-in-browser -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+  <style>
+    :root{--bg:#0f1724;--panel:#0b1220;--muted:#9aa7bf;--accent:#6ee7b7}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    body{display:flex;gap:12px;background:linear-gradient(180deg,#071028, #07192a);color:#e6eef8;padding:12px}
+    .app{display:grid;grid-template-columns:260px 1fr 420px;gap:12px;width:100%;height:calc(100vh - 24px)}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);overflow:auto}
+    header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+    header h1{font-size:16px;margin:0}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:var(--muted);cursor:pointer}
+    .projects{display:flex;flex-direction:column;gap:8px}
+    .project{padding:8px;border-radius:8px;border:1px dashed rgba(255,255,255,0.03);cursor:pointer}
+    .project.active{background:rgba(110,231,183,0.06);border-style:solid;border-color:rgba(110,231,183,0.12)}
+    .files{display:flex;flex-direction:column;gap:6px}
+    .file{padding:6px;border-radius:6px;cursor:pointer}
+    .file.active{background:rgba(255,255,255,0.02)}
+    pre{max-height:60vh;overflow:auto;border-radius:8px;padding:12px}
+    .run-pane{display:flex;flex-direction:column;gap:8px}
+    iframe#runner{flex:1;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:white}
+    .console{height:140px;background:#071427;border-radius:8px;padding:10px;overflow:auto;font-family:monospace;font-size:13px;color:#cfe8ff}
+    .controls{display:flex;gap:8px;align-items:center}
+    input[type=file]{display:none}
+    .muted{color:var(--muted);font-size:13px}
+    .header-row{display:flex;justify-content:space-between;align-items:center}
+    .small{font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Left: Projects -->
+    <div class="card">
+      <div class="header-row">
+        <div>
+          <h1>Projekt</h1>
+          <div class="muted small">Skapa, ladda upp och välj projekt</div>
+        </div>
+        <div>
+          <button id="newProjectBtn">Nytt</button>
+        </div>
+      </div>
+
+      <div class="projects" id="projectsList" style="margin-top:12px"></div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03);margin:12px 0">
+      <label class="small muted">Lägg till filer (välja flera)</label>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <label for="fileInput"><button>Välj filer</button></label>
+        <button id="uploadZipBtn">Ladda upp .zip</button>
+        <input id="fileInput" type="file" multiple />
+        <input id="zipInput" type="file" accept=".zip" style="display:none" />
+      </div>
+      <div style="margin-top:10px" class="muted small">Tips: ladda upp HTML, JS, CSS, PY. Python körs med Pyodide i webbläsaren.</div>
+    </div>
+
+    <!-- Middle: File tree + Code viewer -->
+    <div class="card">
+      <div class="header-row">
+        <div>
+          <h1 id="projectTitle">Välj eller skapa ett projekt</h1>
+          <div class="muted small" id="projectDesc">Inga filer än.</div>
+        </div>
+        <div class="controls">
+          <button id="saveBtn">Spara (ladda ner projekt)</button>
+          <button id="deleteFileBtn">Ta bort fil</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:12px">
+        <div style="width:260px">
+          <div class="muted small">Filer</div>
+          <div class="files" id="fileList" style="margin-top:8px"></div>
+        </div>
+        <div style="flex:1">
+          <div class="muted small">Kod</div>
+          <pre><code id="codeViewer" class="hljs"></code></pre>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="editBtn">Redigera</button>
+            <button id="runBtn">Kör</button>
+            <button id="downloadFileBtn">Ladda ner fil</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Run pane -->
+    <div class="card run-pane">
+      <div class="header-row">
+        <div>
+          <h1>Runner</h1>
+          <div class="muted small">Se resultat och konsol</div>
+        </div>
+        <div>
+          <button id="clearConsoleBtn">Rensa</button>
+        </div>
+      </div>
+
+      <iframe id="runner" sandbox="allow-scripts allow-forms" srcdoc="<p style=\"font-family:sans-serif;padding:12px\">Ingen körning än</p>"></iframe>
+      <div class="muted small">Konsol</div>
+      <div class="console" id="console"></div>
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- Pyodide (Python in browser). Large; will load only when needed. -->
+  <script>
+    // Application state in-memory. Simple: projects -> files map.
+    const state = {projects:[], activeProject:null, activeFile:null, pyodide:null};
+
+    // Utilities
+    function humanName(name){ return name.replace(/[-_]/g,' ')}
+
+    function renderProjects(){
+      const el = document.getElementById('projectsList'); el.innerHTML='';
+      state.projects.forEach((p,idx)=>{
+        const d = document.createElement('div'); d.className='project'+(state.activeProject===idx?' active':'');
+        d.textContent = p.name; d.onclick = ()=>{ state.activeProject = idx; state.activeFile = null; renderAll(); };
+        el.appendChild(d);
+      });
+    }
+
+    function renderFiles(){
+      const fileList = document.getElementById('fileList'); fileList.innerHTML='';
+      if(state.activeProject===null) return;
+      const files = state.projects[state.activeProject].files;
+      Object.keys(files).forEach(name=>{
+        const d = document.createElement('div'); d.className='file'+(state.activeFile===name?' active':''); d.textContent = name;
+        d.onclick = ()=>{ state.activeFile = name; renderAll(); };
+        fileList.appendChild(d);
+      });
+    }
+
+    function renderViewer(){
+      const codeEl = document.getElementById('codeViewer');
+      const title = document.getElementById('projectTitle');
+      const desc = document.getElementById('projectDesc');
+      if(state.activeProject===null){ title.textContent='Välj eller skapa ett projekt'; desc.textContent='Inga filer än.'; codeEl.textContent=''; hljs.highlightElement(codeEl); return; }
+      const proj = state.projects[state.activeProject];
+      title.textContent = proj.name; desc.textContent = (Object.keys(proj.files).length)+' filer';
+      if(!state.activeFile){ codeEl.textContent = '// Välj en fil till vänster för att visa dess innehåll'; hljs.highlightElement(codeEl); return; }
+      const content = proj.files[state.activeFile];
+      codeEl.className = 'hljs';
+      // set language classes roughly
+      if(state.activeFile.endsWith('.html')) codeEl.classList.add('xml');
+      else if(state.activeFile.endsWith('.js')) codeEl.classList.add('javascript');
+      else if(state.activeFile.endsWith('.css')) codeEl.classList.add('css');
+      else if(state.activeFile.endsWith('.py')) codeEl.classList.add('python');
+      else codeEl.classList.add('plaintext');
+      codeEl.textContent = content;
+      hljs.highlightElement(codeEl);
+    }
+
+    function renderAll(){ renderProjects(); renderFiles(); renderViewer(); }
+
+    // Project/file management
+    document.getElementById('newProjectBtn').onclick = ()=>{
+      const name = prompt('Projektets namn (t.ex. mitt-projekt)');
+      if(!name) return; state.projects.push({name, files:{}}); state.activeProject = state.projects.length-1; state.activeFile=null; renderAll();
+    }
+
+    document.getElementById('fileInput').addEventListener('change', async (e)=>{
+      const files = Array.from(e.target.files);
+      if(state.activeProject===null){ alert('Skapa eller välj ett projekt först.'); return; }
+      for(const f of files){ const text = await f.text(); state.projects[state.activeProject].files[f.name] = text; }
+      renderAll(); e.target.value='';
+    });
+
+    document.getElementById('uploadZipBtn').onclick = ()=> document.getElementById('zipInput').click();
+    document.getElementById('zipInput').addEventListener('change', async (e)=>{
+      const f = e.target.files[0]; if(!f) return; if(state.activeProject===null){ alert('Skapa eller välj ett projekt först.'); return; }
+      const arrayBuffer = await f.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const files = Object.keys(zip.files);
+      await Promise.all(files.map(async path=>{ if(zip.files[path].dir) return; const content = await zip.files[path].async('string'); state.projects[state.activeProject].files[path] = content; }));
+      renderAll(); e.target.value='';
+    });
+
+    // Download whole project as zip
+    document.getElementById('saveBtn').onclick = async ()=>{
+      if(state.activeProject===null){ alert('Välj ett projekt först.'); return; }
+      const zip = new JSZip(); const proj = state.projects[state.activeProject];
+      Object.entries(proj.files).forEach(([name,content])=> zip.file(name, content));
+      const blob = await zip.generateAsync({type:'blob'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = proj.name + '.zip'; a.click();
+    }
+
+    // Download single file
+    document.getElementById('downloadFileBtn').onclick = ()=>{
+      if(!state.activeFile){ alert('Välj en fil först.'); return; }
+      const content = state.projects[state.activeProject].files[state.activeFile]; const blob = new Blob([content],{type:'text/plain'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = state.activeFile; a.click();
+    }
+
+    // Delete file
+    document.getElementById('deleteFileBtn').onclick = ()=>{
+      if(state.activeProject===null){ alert('Välj ett projekt.'); return; }
+      if(!state.activeFile){ alert('Välj en fil att ta bort.'); return; }
+      if(!confirm('Ta bort '+state.activeFile+'?')) return;
+      delete state.projects[state.activeProject].files[state.activeFile]; state.activeFile=null; renderAll();
+    }
+
+    // Edit file in prompt (simple)
+    document.getElementById('editBtn').onclick = ()=>{
+      if(!state.activeFile){ alert('Välj en fil att redigera.'); return; }
+      const cur = state.projects[state.activeProject].files[state.activeFile];
+      const edited = prompt('Redigera fil: '+state.activeFile, cur);
+      if(edited!==null) state.projects[state.activeProject].files[state.activeFile] = edited;
+      renderAll();
+    }
+
+    // Simple console
+    function appendConsole(line){ const c = document.getElementById('console'); c.innerHTML += line.replace(/\n/g,'<br>') + '<br>'; c.scrollTop = c.scrollHeight; }
+    document.getElementById('clearConsoleBtn').onclick = ()=> document.getElementById('console').innerHTML='';
+
+    // Runner logic
+    async function runActiveFile(){
+      if(state.activeProject===null || !state.activeFile){ alert('Välj en fil att köra.'); return; }
+      const name = state.activeFile; const content = state.projects[state.activeProject].files[name];
+      const iframe = document.getElementById('runner');
+      // capture console from iframe via postMessage
+      window.addEventListener('message', (ev)=>{
+        if(ev.data && ev.data.__fromRunner){ appendConsole(String(ev.data.msg)); }
+      });
+
+      if(name.endsWith('.html')){
+        iframe.srcdoc = content;
+        appendConsole('Körde HTML: '+name);
+      } else if(name.endsWith('.js')){
+        // create an HTML wrapper that posts console messages
+        const wrapper = `<!doctype html><html><body><script>
+        (function(){
+          const origLog = console.log; console.log = function(){ origLog.apply(console,arguments); parent.postMessage({__fromRunner:true,msg: Array.from(arguments).join(' ')}, '*'); };
+          try{\n${content}\n}catch(e){ parent.postMessage({__fromRunner:true,msg: 'Fel: '+e}, '*'); }
+        })();</script></body></html>`;
+        iframe.srcdoc = wrapper; appendConsole('Körde JS: '+name);
+      } else if(name.endsWith('.py')){
+        appendConsole('Startar Pyodide (laddar)... — detta sker första gången och kan ta någon sekund.');
+        if(!state.pyodide){
+          // load pyodide
+          const pyScript = document.createElement('script'); pyScript.src='https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js'; document.head.appendChild(pyScript);
+          await new Promise(res=>{ pyScript.onload = res; pyScript.onerror = ()=>{ alert('Kunde inte ladda Pyodide. Kontrollera internetanslutning.'); res(); }; });
+          state.pyodide = await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v0.23.4/full/'});
+        }
+        try{
+          // capture stdout
+          let output = '';
+          state.pyodide.setStdout({batched:true, print:(s)=>{ output += s + '\n'; }});
+          state.pyodide.setStderr({batched:true, print:(s)=>{ output += 'ERR: ' + s + '\n'; }});
+          await state.pyodide.runPythonAsync(content);
+          appendConsole(output || 'Klar (ingen output)');
+        }catch(e){ appendConsole('Fel vid körning: '+e); }
+      } else {
+        appendConsole('Kan inte köra filtypen: '+name);
+      }
+    }
+
+    document.getElementById('runBtn').onclick = runActiveFile;
+
+    // download project to GitHub: provide simple helper that creates README and instructions (user must push to repo themselves)
+    function initialDemo(){
+      const demo = {
+        name:'demo-site',
+        files: {
+          'index.html': `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Demo</title></head><body><h1>Hej — demo</h1><p>Ladda upp dina projekt i projektpanelen.</p></body></html>`,
+          'script.js': `console.log('Hello from demo script');`,
+          'readme.md': `# Demo\nKopiera filerna till din GitHub-repo och publicera via GitHub Pages (Settings → Pages).`
+        }
+      };
+      state.projects.push(demo); state.activeProject = 0; renderAll();
+    }
+
+    // simple download project as bundle on close? not needed
+
+    // delete entire project with confirm (double-click project)
+    document.getElementById('projectsList').addEventListener('dblclick', (e)=>{
+      const idx = state.activeProject; if(idx===null) return; if(confirm('Ta bort projekt '+state.projects[idx].name+'?')){ state.projects.splice(idx,1); state.activeProject = state.projects.length?0:null; state.activeFile=null; renderAll(); }
+    });
+
+    // delete single file with Delete key
+    window.addEventListener('keydown',(e)=>{ if(e.key==='Delete' && state.activeFile){ delete state.projects[state.activeProject].files[state.activeFile]; state.activeFile=null; renderAll(); } });
+
+    // Initial demo
+    initialDemo();
+
+    // convenience: when user runs HTML that posts messages, intercept to console
+    window.addEventListener('message', (ev)=>{ if(ev.data && ev.data.__fromRunner){ appendConsole(ev.data.msg); } });
+
+    // Keep UI responsive
+  </script>
+</body>
 </html>
+
+</html>
+
 
 
 
